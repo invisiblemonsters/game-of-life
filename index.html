@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Conway's Game of Life</title>
+<style>
+  :root {
+    --bg: #05070c;
+    --panel: #0b0f18;
+    --line: #1c2434;
+    --text: #dbe7f5;
+    --muted: #7d8da6;
+    --accent: #6ee7ff;
+    --accent-dim: #1f6f80;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: radial-gradient(1200px 700px at 20% -10%, #0d1a26 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  body {
+    padding: 28px 20px 40px;
+    display: flex;
+    justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 1180px; }
+  header { margin-bottom: 18px; }
+  h1 {
+    margin: 0;
+    font-size: 15px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--text);
+  }
+  h1 span { color: var(--accent); }
+  .tag {
+    margin: 8px 0 0;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 268px;
+    gap: 18px;
+    align-items: start;
+  }
+  .board-panel {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 24px 60px -30px rgba(110, 231, 255, 0.35);
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    background: #070a11;
+    image-rendering: pixelated;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .hud {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .hud b { color: var(--accent); font-weight: 600; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .panel + .panel { margin-top: 12px; }
+  .label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 7px;
+  }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1 1 0; min-width: 0; }
+  button, select, input[type="number"] {
+    font: inherit;
+    font-size: 12px;
+    color: var(--text);
+    background: #0f1622;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  }
+  button:hover, select:hover { border-color: var(--accent-dim); color: #fff; }
+  button:active { background: #14202e; }
+  button.primary { border-color: var(--accent-dim); color: var(--accent); }
+  button.primary:hover { background: #0d2630; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .stack { display: grid; gap: 8px; }
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 22px;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: #223047; border-radius: 3px; }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px; margin-top: -5px;
+    border-radius: 50%; background: var(--accent); border: none;
+  }
+  input[type="range"]::-moz-range-track { height: 3px; background: #223047; border-radius: 3px; }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px; border: none; border-radius: 50%; background: var(--accent);
+  }
+  .check {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text); cursor: pointer; user-select: none;
+  }
+  .check input { accent-color: var(--accent); width: 14px; height: 14px; }
+  .keys { font-size: 10px; line-height: 1.8; color: var(--muted); }
+  .keys kbd {
+    font: inherit; color: var(--text); background: #0f1622;
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+  }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    body { padding: 18px 12px 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Conway's Game <span>of Life</span></h1>
+    <p class="tag">B3/S23 &middot; draw with the mouse &middot; drag to paint</p>
+  </header>
+
+  <div class="layout">
+    <section class="board-panel">
+      <canvas id="board" width="960" height="640" aria-label="Game of Life board"></canvas>
+      <div class="hud">
+        <span>generation <b id="gen">0</b></span>
+        <span>population <b id="pop">0</b></span>
+        <span>board <b id="dims">96 &times; 64</b></span>
+        <span>edge <b id="edge">wrap</b></span>
+      </div>
+    </section>
+
+    <aside>
+      <div class="panel">
+        <div class="stack">
+          <button id="play" class="primary" type="button">Play &#9654;</button>
+          <div class="row">
+            <button id="step" type="button">Step</button>
+            <button id="clear" type="button">Clear</button>
+          </div>
+          <button id="random" type="button">Randomize</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label class="label" for="preset">Pattern</label>
+        <div class="row">
+          <select id="preset"></select>
+          <button id="load" type="button">Load</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label class="label" for="speed">Speed <span id="speedVal">12</span> gen/s</label>
+        <input id="speed" type="range" min="1" max="60" step="1" value="12" />
+        <label class="label" for="density" style="margin-top:10px">Random density <span id="densityVal">28</span>%</label>
+        <input id="density" type="range" min="5" max="80" step="1" value="28" />
+      </div>
+
+      <div class="panel">
+        <label class="label" for="size">Board size</label>
+        <select id="size">
+          <option value="64x48">64 &times; 48</option>
+          <option value="96x64" selected>96 &times; 64</option>
+          <option value="128x96">128 &times; 96</option>
+          <option value="160x120">160 &times; 120</option>
+        </select>
+        <label class="check" style="margin-top:12px">
+          <input id="wrap" type="checkbox" checked />
+          <span>Wrap edges (torus)</span>
+        </label>
+      </div>
+
+      <div class="panel keys">
+        <kbd>space</kbd> play / pause<br />
+        <kbd>n</kbd> step &nbsp; <kbd>r</kbd> random &nbsp; <kbd>c</kbd> clear<br />
+        <kbd>shift</kbd>+click erase
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="life.js"></script>
+<script data-module="ui">
+(function () {
+  'use strict';
+  if (typeof document === 'undefined') return;
+
+  var Life = window.Life;
+  var canvas = document.getElementById('board');
+  var ctx = canvas.getContext('2d');
+
+  var CELL = 10;
+  var cols = 96;
+  var rows = 64;
+  var grid = Life.createGrid(cols, rows);
+  var gen = 0;
+  var playing = false;
+  var wrap = true;
+  var speed = 12;
+  var density = 0.28;
+  var acc = 0;
+  var last = 0;
+  var paint = 1;
+  var painting = false;
+
+  var els = {
+    play: document.getElementById('play'),
+    step: document.getElementById('step'),
+    clear: document.getElementById('clear'),
+    random: document.getElementById('random'),
+    preset: document.getElementById('preset'),
+    load: document.getElementById('load'),
+    speed: document.getElementById('speed'),
+    speedVal: document.getElementById('speedVal'),
+    density: document.getElementById('density'),
+    densityVal: document.getElementById('densityVal'),
+    size: document.getElementById('size'),
+    wrap: document.getElementById('wrap'),
+    gen: document.getElementById('gen'),
+    pop: document.getElementById('pop'),
+    dims: document.getElementById('dims'),
+    edge: document.getElementById('edge')
+  };
+
+  var patterns = {};
+  Object.keys(Life.PRESETS).forEach(function (name) {
+    patterns[name] = Life.parseRLE(Life.PRESETS[name]);
+    var opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    els.preset.appendChild(opt);
+  });
+
+  function resize() {
+    canvas.width = cols * CELL;
+    canvas.height = rows * CELL;
+    els.dims.textContent = cols + ' \u00d7 ' + rows;
+    els.edge.textContent = wrap ? 'wrap' : 'dead';
+  }
+
+  function reset(nextCols, nextRows) {
+    cols = nextCols;
+    rows = nextRows;
+    grid = Life.createGrid(cols, rows);
+    gen = 0;
+    acc = 0;
+    resize();
+    syncHud();
+  }
+
+  function syncHud() {
+    els.gen.textContent = String(gen);
+    els.pop.textContent = String(Life.population(grid));
+    els.edge.textContent = wrap ? 'wrap' : 'dead';
+  }
+
+  function draw() {
+    var w = canvas.width;
+    var h = canvas.height;
+    var dpr = window.devicePixelRatio || 1;
+
+    ctx.fillStyle = '#070a11';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(110, 231, 255, 0.06)';
+    ctx.lineWidth = Math.max(1, dpr > 1 ? 1 : 1);
+    ctx.beginPath();
+    for (var c = 1; c < cols; c++) {
+      var x = c * CELL + 0.5;
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+    }
+    for (var r = 1; r < rows; r++) {
+      var y = r * CELL + 0.5;
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = '#8ce9ff';
+    for (var row = 0; row < rows; row++) {
+      var base = row * cols;
+      for (var col = 0; col < cols; col++) {
+        if (grid[base + col]) {
+          ctx.fillRect(col * CELL + 1, row * CELL + 1, CELL - 2, CELL - 2);
+        }
+      }
+    }
+
+    if (playing) {
+      ctx.fillStyle = 'rgba(110, 231, 255, 0.55)';
+      ctx.fillRect(w - 14, 10, 4, 4);
+    }
+  }
+
+  function advance() {
+    grid = Life.step(grid, cols, rows, { wrap: wrap });
+    gen++;
+    syncHud();
+  }
+
+  function setPlaying(next) {
+    playing = next;
+    els.play.textContent = playing ? 'Pause \u23f8' : 'Play \u25b6';
+    acc = 0;
+    last = 0;
+  }
+
+  function cellFromEvent(ev) {
+    var rect = canvas.getBoundingClientRect();
+    var x = (ev.clientX - rect.left) / rect.width * cols;
+    var y = (ev.clientY - rect.top) / rect.height * rows;
+    return { col: Math.floor(x), row: Math.floor(y) };
+  }
+
+  function stamp(ev) {
+    var p = cellFromEvent(ev);
+    if (p.col < 0 || p.row < 0 || p.col >= cols || p.row >= rows) return;
+    grid[p.row * cols + p.col] = paint;
+    syncHud();
+  }
+
+  canvas.addEventListener('pointerdown', function (ev) {
+    canvas.setPointerCapture(ev.pointerId);
+    var p = cellFromEvent(ev);
+    var current = p.col >= 0 && p.row >= 0 && p.col < cols && p.row < rows
+      ? grid[p.row * cols + p.col] : 0;
+    paint = ev.shiftKey ? 0 : current ? 0 : 1;
+    painting = true;
+    stamp(ev);
+  });
+
+  canvas.addEventListener('pointermove', function (ev) {
+    if (!painting) return;
+    stamp(ev);
+  });
+
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (name) {
+    canvas.addEventListener(name, function () { painting = false; });
+  });
+
+  els.play.addEventListener('click', function () { setPlaying(!playing); });
+  els.step.addEventListener('click', function () { setPlaying(false); advance(); });
+  els.clear.addEventListener('click', function () {
+    setPlaying(false);
+    grid = Life.createGrid(cols, rows);
+    gen = 0;
+    syncHud();
+  });
+  els.random.addEventListener('click', function () {
+    setPlaying(false);
+    Life.randomFill(grid, density);
+    gen = 0;
+    syncHud();
+  });
+  els.load.addEventListener('click', function () {
+    var p = patterns[els.preset.value];
+    if (!p) return;
+    setPlaying(false);
+    grid = Life.createGrid(cols, rows);
+    var off = Life.centerOffset(cols, rows, p);
+    grid = Life.place(grid, cols, rows, p, off.col, off.row, wrap);
+    gen = 0;
+    syncHud();
+  });
+  els.speed.addEventListener('input', function () {
+    speed = Number(els.speed.value) || 1;
+    els.speedVal.textContent = String(speed);
+  });
+  els.density.addEventListener('input', function () {
+    density = (Number(els.density.value) || 28) / 100;
+    els.densityVal.textContent = String(Math.round(density * 100));
+  });
+  els.wrap.addEventListener('change', function () {
+    wrap = els.wrap.checked;
+    syncHud();
+  });
+  els.size.addEventListener('change', function () {
+    var parts = els.size.value.split('x');
+    setPlaying(false);
+    reset(parseInt(parts[0], 10), parseInt(parts[1], 10));
+  });
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.target && /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName)) return;
+    if (ev.key === ' ') { ev.preventDefault(); setPlaying(!playing); }
+    else if (ev.key === 'n' || ev.key === 'N') { setPlaying(false); advance(); }
+    else if (ev.key === 'r' || ev.key === 'R') { els.random.click(); }
+    else if (ev.key === 'c' || ev.key === 'C') { els.clear.click(); }
+  });
+
+  function frame(ts) {
+    if (!last) last = ts;
+    var dt = Math.min(250, ts - last);
+    last = ts;
+    if (playing) {
+      acc += dt;
+      var interval = 1000 / speed;
+      var budget = 0;
+      while (acc >= interval && budget < 8) {
+        advance();
+        acc -= interval;
+        budget++;
+      }
+      if (acc > interval * 8) acc = 0;
+    }
+    draw();
+    window.requestAnimationFrame(frame);
+  }
+
+  // Start with a little life on screen so the page is never blank.
+  Life.randomFill(grid, 0.22, Life.mulberry32(20261030));
+  syncHud();
+  resize();
+  window.requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

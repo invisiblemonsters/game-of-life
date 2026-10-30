@@ -1,0 +1,15 @@
+{
+  "name": "game-of-life",
+  "version": "1.0.0",
+  "description": "Conway's Game of Life with a tiny testable engine and a canvas UI",
+  "main": "life.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "game-of-life",
+    "cellular-automata",
+    "canvas"
+  ],
+  "license": "MIT"
+}
